@@ -10,8 +10,7 @@ ENV MW_VERSION=REL1_39 \
 	MW_ORIGIN_FILES=/mw_origin_files \
 	MW_VOLUME=/mediawiki \
 	WWW_USER=www-data \
-    WWW_GROUP=www-data \
-    APACHE_LOG_DIR=/var/log/apache2
+    WWW_GROUP=www-data 
 
 # System setup
 RUN set x; \
@@ -21,7 +20,6 @@ RUN set x; \
 	&& aptitude -y upgrade \
 	&& aptitude install -y \
 	git \
-	apache2 \
 	software-properties-common \
 	gpg \
 	apt-transport-https \
@@ -58,20 +56,15 @@ RUN set x; \
 	php7.4-apcu \
 	php7.4-redis \
 	php7.4-curl \
-	php7.4-zip \
+	php7.4-zip \	
+	php7.4-fpm \
 	&& aptitude clean \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Post install configuration
 RUN set -x; \
-	# Remove default config
-	rm /etc/apache2/sites-enabled/000-default.conf \
-	&& rm /etc/apache2/sites-available/000-default.conf \
-	&& rm -rf /var/www/html \
-	# Enable rewrite module
-    && a2enmod rewrite \
     # Create directories
-    && mkdir -p $MW_HOME \
+	mkdir -p $MW_HOME \
     && mkdir -p $MW_ORIGIN_FILES \
     && mkdir -p $MW_VOLUME
 
@@ -631,12 +624,8 @@ ENV MW_ENABLE_JOB_RUNNER=true \
 	LOG_FILES_REMOVE_OLDER_THAN_DAYS=10
 
 COPY _sources/configs/msmtprc /etc/
-COPY _sources/configs/mediawiki.conf /etc/apache2/sites-enabled/
-COPY _sources/configs/status.conf /etc/apache2/mods-available/
 COPY _sources/configs/php_error_reporting.ini _sources/configs/php_upload_max_filesize.ini /etc/php/7.4/cli/conf.d/
-COPY _sources/configs/php_error_reporting.ini _sources/configs/php_upload_max_filesize.ini /etc/php/7.4/apache2/conf.d/
-COPY _sources/configs/php_max_input_vars.ini _sources/configs/php_max_input_vars.ini /etc/php/7.4/apache2/conf.d/
-COPY _sources/configs/php_timeouts.ini /etc/php/7.4/apache2/conf.d/
+COPY _sources/configs/php_error_reporting.ini _sources/configs/php_upload_max_filesize.ini /etc/php/7.4/fpm/conf.d/
 COPY _sources/scripts/*.sh /
 COPY _sources/scripts/*.php $MW_HOME/maintenance/
 COPY _sources/configs/robots.txt $WWW_ROOT/
@@ -644,21 +633,16 @@ COPY _sources/configs/.htaccess $WWW_ROOT/
 COPY _sources/images/favicon.ico $WWW_ROOT/
 COPY _sources/canasta/LocalSettings.php _sources/canasta/CanastaUtils.php _sources/canasta/CanastaDefaultSettings.php $MW_HOME/
 COPY _sources/canasta/getMediawikiSettings.php /
-COPY _sources/configs/mpm_prefork.conf /etc/apache2/mods-available/mpm_prefork.conf
 
 RUN set -x; \
 	chmod -v +x /*.sh \
 	# Sitemap directory
 	&& ln -s $MW_VOLUME/sitemap $MW_HOME/sitemap \
-	# Comment out ErrorLog and CustomLog parameters, we use rotatelogs in mediawiki.conf for the log files
-	&& sed -i 's/^\(\s*ErrorLog .*\)/# \1/g' /etc/apache2/apache2.conf \
-	&& sed -i 's/^\(\s*CustomLog .*\)/# \1/g' /etc/apache2/apache2.conf \
     # Make web installer work with Canasta
     && cp "$MW_HOME/includes/NoLocalSettings.php" "$MW_HOME/includes/CanastaNoLocalSettings.php" \
     && sed -i 's/MW_CONFIG_FILE/CANASTA_CONFIG_FILE/g' "$MW_HOME/includes/CanastaNoLocalSettings.php" \
-    # Modify config
-    && sed -i '/<Directory \/var\/www\/>/,/<\/Directory>/ s/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf \
-    && a2enmod expires
+	# Enable environment variables for FPM workers
+	&& sed -i '/clear_env/s/^;//' /etc/php/7.4/fpm/pool.d/www.conf 
 
 COPY _sources/images/Powered-by-Canasta.png /var/www/mediawiki/w/resources/assets/
 

@@ -102,7 +102,7 @@ prepare_extensions_skins_symlinks
 # note that this command will also set all the necessary permissions
 echo "Syncing files..."
 rsync -ah --inplace --ignore-existing --remove-source-files \
-  -og --chown=$WWW_GROUP:$WWW_USER --chmod=Fg=rw,Dg=rwx \
+  -og --chown=$WWW_USER:$WWW_GROUP --chmod=Fg=rw,Dg=rwx \
   "$MW_ORIGIN_FILES"/ "$MW_VOLUME"/
 
 # We don't need it anymore
@@ -122,17 +122,10 @@ echo "Checking permissions of $MW_VOLUME..."
 if dir_is_writable $MW_VOLUME; then
   echo "Permissions are OK!"
 else
-  chown -R "$WWW_GROUP":"$WWW_GROUP" "$MW_VOLUME"
+  chown -R "$WWW_USER":"$WWW_GROUP" "$MW_VOLUME"
   chmod -R g=rwX "$MW_VOLUME"
 fi
 
-echo "Checking permissions of $APACHE_LOG_DIR..."
-if dir_is_writable $APACHE_LOG_DIR; then
-  echo "Permissions are OK!"
-else
-  chown -R "$WWW_GROUP":"$WWW_GROUP" $APACHE_LOG_DIR
-  chmod -R g=rwX $APACHE_LOG_DIR
-fi
 
 jobrunner() {
     sleep 3
@@ -157,6 +150,13 @@ transcoder() {
 sitemapgen() {
     sleep 3
     if isTrue "$MW_ENABLE_SITEMAP_GENERATOR"; then
+        echo "Checking permissions of $MW_VOLUME/sitemap"
+        if dir_is_writable $MW_VOLUME/sitemap; then
+          echo "Permissions are OK!"
+        else
+          chown -R "$WWW_USER":"$WWW_GROUP" "$MW_VOLUME/sitemap"
+          chmod -R g=rwX "$MW_VOLUME/sitemap"
+        fi
         # Fetch & export script path for sitemap generator
         if [ -z "$MW_SCRIPT_PATH" ]; then
           MW_SCRIPT_PATH=$(get_mediawiki_variable wgScriptPath)
@@ -223,10 +223,5 @@ jobrunner &
 transcoder &
 sitemapgen &
 
-############### Run Apache ###############
-# Make sure we're not confused by old, incompletely-shutdown httpd
-# context after restarting the container.  httpd won't start correctly
-# if it thinks it is already running.
-rm -rf /run/httpd/* /tmp/httpd*
-
-exec /usr/sbin/apachectl -DFOREGROUND
+# waiting for maintainenece scripts
+wait
